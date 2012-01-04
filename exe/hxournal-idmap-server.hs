@@ -12,4 +12,4 @@ main :: IO ()
 main = do 
   putStrLn "hxournal-idmap-server"
   acid <- openLocalState M.empty 
-  warpDebug 7800 (Hxournal-idmapServer acid)
+  warpDebug 7800 (HXournalIDMapServer acid)

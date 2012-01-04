@@ -17,18 +17,18 @@ import Data.Aeson as A
 import Data.UUID
 import Database.HXournal.IDMap.Server.Type
 
-mkYesod "Hxournal-idmapServer" [parseRoutes|
+mkYesod "HXournalIDMapServer" [parseRoutes|
 / HomeR GET
-/listhxournal-idmap  ListHxournal-idmapR GET
-/uploadhxournal-idmap  UploadHxournal-idmapR POST
-/hxournal-idmap/#UUID Hxournal-idmapR 
+/listhxournal-idmap  ListHXournalIDMapR GET
+/uploadhxournal-idmap  UploadHXournalIDMapR POST
+/hxournal-idmap/#UUID HXournalIDMapR 
 |]
 
-instance Yesod Hxournal-idmapServer where
+instance Yesod HXournalIDMapServer where
   approot _ = ""
   maximumContentLength _ _ = 100000000
 
-{-instance RenderMessage Hxournal-idmapServer FormMessage where
+{-instance RenderMessage HXournalIDMapServer FormMessage where
   renderMessage _ _ = defaultFormMessage -}
 
 
@@ -49,8 +49,8 @@ defhlet :: GGWidget m Handler ()
 defhlet = [whamlet| <h1> HTML output not supported |]
 
 
-getListHxournal-idmapR :: Handler RepHtmlJson
-getListHxournal-idmapR = do 
+getListHXournalIDMapR :: Handler RepHtmlJson
+getListHXournalIDMapR = do 
   liftIO $ putStrLn "getQueueListR called" 
   acid <- return.server_acid =<< getYesod
   r <- liftIO $ query acid QueryAll
@@ -58,8 +58,8 @@ getListHxournal-idmapR = do
   defaultLayoutJson defhlet (A.toJSON (Just r))
 
 
-postUploadHxournal-idmapR :: Handler RepHtmlJson
-postUploadHxournal-idmapR = do 
+postUploadHXournalIDMapR :: Handler RepHtmlJson
+postUploadHXournalIDMapR = do 
   liftIO $ putStrLn "postQueueR called" 
   acid <- return.server_acid =<< getYesod
   _ <- getRequest
@@ -68,46 +68,46 @@ postUploadHxournal-idmapR = do
   let parsed = parse json bs 
   case parsed of 
     Done _ parsedjson -> do 
-      case (A.fromJSON parsedjson :: A.Result Hxournal-idmapInfo) of 
+      case (A.fromJSON parsedjson :: A.Result HXournalIDMapInfo) of 
         Success minfo -> do 
-          r <- liftIO $ update acid (AddHxournal-idmap minfo)
+          r <- liftIO $ update acid (AddHXournalIDMap minfo)
           liftIO $ print (Just r)
           liftIO $ print (A.toJSON (Just r))
           defaultLayoutJson defhlet (A.toJSON (Just r))
         Error err -> do 
           liftIO $ putStrLn err 
-          defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Hxournal-idmapInfo))
+          defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
     Fail _ ctxts err -> do 
       liftIO $ putStrLn (concat ctxts++err)
-      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Hxournal-idmapInfo))
+      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
     Partial _ -> do 
       liftIO $ putStrLn "partial" 
-      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Hxournal-idmapInfo))
+      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
 
 
 
-handleHxournal-idmapR :: UUID -> Handler RepHtmlJson
-handleHxournal-idmapR name = do
+handleHXournalIDMapR :: UUID -> Handler RepHtmlJson
+handleHXournalIDMapR name = do
   wr <- return.reqWaiRequest =<< getRequest
   case requestMethod wr of 
-    "GET" -> getHxournal-idmapR name
-    "PUT" -> putHxournal-idmapR name
-    "DELETE" -> deleteHxournal-idmapR name
-    x -> error ("No such action " ++ show x ++ " in handlerHxournal-idmapR")
+    "GET" -> getHXournalIDMapR name
+    "PUT" -> putHXournalIDMapR name
+    "DELETE" -> deleteHXournalIDMapR name
+    x -> error ("No such action " ++ show x ++ " in handlerHXournalIDMapR")
 
-getHxournal-idmapR :: UUID -> Handler RepHtmlJson
-getHxournal-idmapR idee = do 
-  liftIO $ putStrLn "getHxournal-idmapR called"
+getHXournalIDMapR :: UUID -> Handler RepHtmlJson
+getHXournalIDMapR idee = do 
+  liftIO $ putStrLn "getHXournalIDMapR called"
   acid <- return.server_acid =<< getYesod
-  r <- liftIO $ query acid (QueryHxournal-idmap idee)
+  r <- liftIO $ query acid (QueryHXournalIDMap idee)
   liftIO $ putStrLn $ show r 
   let hlet = [whamlet| <h1> File #{idee}|]
   defaultLayoutJson hlet (A.toJSON (Just r))
 
 
-putHxournal-idmapR :: UUID -> Handler RepHtmlJson
-putHxournal-idmapR idee = do 
-  liftIO $ putStrLn "putHxournal-idmapR called"
+putHXournalIDMapR :: UUID -> Handler RepHtmlJson
+putHXournalIDMapR idee = do 
+  liftIO $ putStrLn "putHXournalIDMapR called"
   acid <- return.server_acid =<< getYesod
   _wr <- return.reqWaiRequest =<< getRequest
   bs' <- lift EL.consume
@@ -116,27 +116,27 @@ putHxournal-idmapR idee = do
   liftIO $ print parsed 
   case parsed of 
     Done _ parsedjson -> do 
-      case (A.fromJSON parsedjson :: A.Result Hxournal-idmapInfo) of 
+      case (A.fromJSON parsedjson :: A.Result HXournalIDMapInfo) of 
         Success minfo -> do 
-          if idee == hxournal-idmap_uuid minfo
-            then do r <- liftIO $ update acid (UpdateHxournal-idmap minfo)
+          if idee == hxournal_idmap_uuid minfo
+            then do r <- liftIO $ update acid (UpdateHXournalIDMap minfo)
                     defaultLayoutJson defhlet (A.toJSON (Just r))
             else do liftIO $ putStrLn "hxournal-idmapname mismatched"
-                    defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Hxournal-idmapInfo))
+                    defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
         Error err -> do 
           liftIO $ putStrLn err 
-          defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Hxournal-idmapInfo))
+          defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
     Fail _ ctxts err -> do 
       liftIO $ putStrLn (concat ctxts++err)
-      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Hxournal-idmapInfo))
+      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
          
     Partial _ -> do 
       liftIO $ putStrLn "partial" 
-      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Hxournal-idmapInfo))
+      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
 
-deleteHxournal-idmapR :: UUID -> Handler RepHtmlJson
-deleteHxournal-idmapR idee = do 
+deleteHXournalIDMapR :: UUID -> Handler RepHtmlJson
+deleteHXournalIDMapR idee = do 
   acid <- return.server_acid =<< getYesod
-  r <- liftIO $ update acid (DeleteHxournal-idmap idee)
+  r <- liftIO $ update acid (DeleteHXournalIDMap idee)
   liftIO $ putStrLn $ show r 
   defaultLayoutJson defhlet (A.toJSON (Just r))

@@ -20,6 +20,6 @@ instance SinglePiece UUID where
 instance ToHtml UUID where
   toHtml = toHtml . toString 
 
-data Hxournal-idmapServer = Hxournal-idmapServer {
-  server_acid :: AcidState Hxournal-idmapInfoRepository
+data HXournalIDMapServer = HXournalIDMapServer {
+  server_acid :: AcidState HXournalIDMapInfoRepository
 }
