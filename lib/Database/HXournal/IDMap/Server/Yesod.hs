@@ -16,6 +16,8 @@ import Data.Attoparsec as P
 import Data.Aeson as A
 import Data.UUID
 import Data.Time.Clock
+import Data.List (sortBy)
+import Data.Function (on)
 import Database.HXournal.IDMap.Server.Type
 
 mkYesod "HXournalIDMapServer" [parseRoutes|
@@ -64,7 +66,7 @@ getListHXournalIDMapUsingTimeR time1 time2 = do
   setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
   let cmpfunc x = let ctime = hxournal_idmap_creationtime x
                   in ctime >= time1 && ctime <= time2
-  let filtered = filter cmpfunc  r 
+  let filtered = sortBy (compare `on` hxournal_idmap_creationtime) . filter cmpfunc $  r 
   defaultLayoutJson defhlet (A.toJSON (Just filtered))
 
 getListHXournalIDMapR :: Handler RepHtmlJson
