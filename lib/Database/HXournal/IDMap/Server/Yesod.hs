@@ -15,13 +15,15 @@ import Data.Acid
 import Data.Attoparsec as P
 import Data.Aeson as A
 import Data.UUID
+import Data.Time.Clock
 import Database.HXournal.IDMap.Server.Type
 
 mkYesod "HXournalIDMapServer" [parseRoutes|
 / HomeR GET
-/listhxournal-idmap  ListHXournalIDMapR GET
-/uploadhxournal-idmap  UploadHXournalIDMapR POST
-/hxournal-idmap/#UUID HXournalIDMapR 
+/listhxournalidmap  ListHXournalIDMapR GET
+/uploadhxournalidmap  UploadHXournalIDMapR POST
+/hxournalidmap/#UUID HXournalIDMapR 
+/listhxournalidmapusingtime/#UTCTime/#UTCTime ListHXournalIDMapUsingTimeR GET
 |]
 
 instance Yesod HXournalIDMapServer where
@@ -48,6 +50,22 @@ getHomeR = do
 defhlet :: GGWidget m Handler ()
 defhlet = [whamlet| <h1> HTML output not supported |]
 
+getListHXournalIDMapUsingTimeR :: UTCTime -> UTCTime -> Handler RepHtmlJson 
+getListHXournalIDMapUsingTimeR time1 time2 = do 
+  liftIO $ putStrLn "getListHXournalIDMapUsingTimeR"
+  acid <- return.server_acid =<< getYesod
+  r <- liftIO $ query acid QueryAll
+  liftIO $ putStrLn $ show r 
+  liftIO $ putStrLn $ show time1 
+  liftIO $ putStrLn $ show time2 
+  setHeader "Access-Control-Allow-Origin" "*"
+  setHeader "Access-Control-Allow-Methods" "POST, GET"
+  setHeader "X-Requested-With" "XmlHttpRequest"
+  setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
+  let cmpfunc x = let ctime = hxournal_idmap_creationtime x
+                  in ctime >= time1 && ctime <= time2
+  let filtered = filter cmpfunc  r 
+  defaultLayoutJson defhlet (A.toJSON (Just filtered))
 
 getListHXournalIDMapR :: Handler RepHtmlJson
 getListHXournalIDMapR = do 
@@ -65,6 +83,7 @@ postUploadHXournalIDMapR = do
   _ <- getRequest
   bs' <- lift EL.consume
   let bs = S.concat bs' 
+  liftIO .  putStrLn . show $ bs 
   let parsed = parse json bs 
   case parsed of 
     Done _ parsedjson -> do 

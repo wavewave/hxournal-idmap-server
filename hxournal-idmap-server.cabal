@@ -1,5 +1,5 @@
 Name:		hxournal-idmap-server
-Version:	0.0
+Version:	0.0.999
 Synopsis:	CRUD sample server
 Description: 	CRUD sample server
 License: 	BSD3
@@ -18,7 +18,7 @@ Executable hxournal-idmap-server
                  bytestring == 0.9.*, 
                  containers == 0.4.*, 
                  acid-state == 0.6.*, 
-                 hxournal-idmap-type == 0.0.*,
+                 hxournal-idmap-type >= 0.0.999 && < 0.2,
                  hxournal-idmap-server
   ghc-options: 	-Wall -O2 -threaded -funbox-strict-fields -fno-warn-unused-do-bind
   ghc-prof-options: -caf-all -auto-all
@@ -31,7 +31,7 @@ Library
                  containers == 0.4.*, 
                  mtl == 2.*, 
                  yesod == 0.9.*, 
-                 hxournal-idmap-type == 0.0.*, 
+                 hxournal-idmap-type >= 0.0.999 && < 0.2, 
                  safecopy == 0.6.*, 
                  acid-state == 0.6.*, 
                  aeson == 0.4.*, 
@@ -44,7 +44,9 @@ Library
                  text == 0.11.*, 
                  yesod-core == 0.9.*, 
                  yesod-form == 0.3.*, 
-                 blaze-html == 0.4.*
+                 blaze-html == 0.4.*, 
+                 time == 1.2.*, 
+                 old-locale == 1.0.*
   Exposed-Modules: 
                    Database.HXournal.IDMap.Server.Type
                    Database.HXournal.IDMap.Server.Yesod
