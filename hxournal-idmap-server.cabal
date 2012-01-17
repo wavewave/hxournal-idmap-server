@@ -35,6 +35,7 @@ Library
                  mtl == 2.*, 
                  yesod == 0.9.*, 
                  hxournal-idmap-type >= 0.0.999 && < 0.2, 
+                 hxournal-store >= 0.1.0.999, 
                  safecopy == 0.6.*, 
                  acid-state == 0.6.*, 
                  aeson == 0.4.*, 

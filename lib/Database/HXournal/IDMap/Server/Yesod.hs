@@ -28,6 +28,9 @@ import Text.Blaze
 import System.FilePath
 import System.Directory 
 
+import Control.Concurrent
+import Database.HXournal.Store.Job
+
 mkYesod "HXournalIDMapServer" [parseRoutes|
 / HomeR GET
 /test TestR
@@ -212,6 +215,7 @@ $(function() {
       <form id="form" action=@{HXournalIDMapR hxournal_idmap_uuid}> 
         <input type="text" class="datepicker" id="creationtime">
         <input type="submit" value="Submit">
+    <p>  #{hxournal_idmap_currentversion}
     <p>  #{hxournal_idmap_numofpages}
     <p> 
       <form id="formpost"  method=post action=#{urlbase}@{ReplaceFileR hxournal_idmap_uuid} enctype=#{enctype}>
@@ -294,17 +298,36 @@ fileForm = renderTable fileAForm
 postReplaceFileR :: UUID -> Handler RepHtmlJson 
 postReplaceFileR idee = do 
   liftIO $ putStrLn "postReplaceFileR called"
-  ((result,widget),enctype) <- runFormPost fileForm 
-
-  case result of 
-    FormSuccess r -> do 
-      let content = Yesod.fileContent . fileFile $ r
-      tempdir <- liftIO $ getTemporaryDirectory
-      liftIO . LS.writeFile (tempdir</> toString idee ++ "_new.xoj") $ content
-      -- liftIO . LS.putStrLn .  
-    _ -> do 
-      liftIO $ putStrLn "fail"
-
   let defaultfn = defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Int))
+      
 
-  defaultfn 
+  acid <- return . server_acid =<< getYesod
+  minfo <- liftIO $ query acid (QueryHXournalIDMap idee)
+  maybe defaultfn 
+        (\info -> do 
+          let idstr = toString idee 
+              nver = hxournal_idmap_currentversion info + 1
+          ((result,widget),enctype) <- runFormPost fileForm 
+          case result of 
+            FormSuccess r -> do 
+              let content = Yesod.fileContent . fileFile $ r
+              tempdir <- liftIO $ getTemporaryDirectory
+              let filename = (tempdir</> idstr ++ "_new.xoj")
+              liftIO . LS.writeFile filename $ content
+              liftIO $ threadDelay 1000000 
+              npages <- liftIO $ startNewVersion idstr nver filename
+              let newinfo = info { hxournal_idmap_currentversion = nver
+                                 , hxournal_idmap_numofpages = npages } 
+              liftIO $ update acid (UpdateHXournalIDMap newinfo)
+
+              defaultfn 
+            _ -> do 
+              liftIO $ putStrLn "fail"
+              defaultfn 
+              
+
+        ) 
+        minfo
+
+
+
