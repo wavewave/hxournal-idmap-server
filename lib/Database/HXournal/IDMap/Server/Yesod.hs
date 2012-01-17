@@ -6,6 +6,8 @@
 
 module Database.HXournal.IDMap.Server.Yesod where 
 
+import Control.Applicative
+
 import Yesod hiding (update)
 import Network.Wai
 import qualified Data.Enumerator.List as EL
@@ -20,8 +22,11 @@ import Data.List (sortBy)
 import Data.Function (on)
 import Database.HXournal.IDMap.Server.Type
 
+import qualified Data.ByteString.Lazy as LS
 import Data.Text (unpack)
 import Text.Blaze
+import System.FilePath
+import System.Directory 
 
 mkYesod "HXournalIDMapServer" [parseRoutes|
 / HomeR GET
@@ -31,14 +36,16 @@ mkYesod "HXournalIDMapServer" [parseRoutes|
 /hxournalidmap/#UUID HXournalIDMapR 
 /listhxournalidmapusingtime/#UTCTime/#UTCTime ListHXournalIDMapUsingTimeR GET
 /replacecreationtime/#UUID ReplaceCreationTimeR GET
+/replacefile/#UUID ReplaceFileR POST 
 |]
+
 
 instance Yesod HXournalIDMapServer where
   approot _ = ""
   maximumContentLength _ _ = 100000000
 
-{-instance RenderMessage HXournalIDMapServer FormMessage where
-  renderMessage _ _ = defaultFormMessage -}
+instance RenderMessage HXournalIDMapServer FormMessage where
+  renderMessage _ _ = defaultFormMessage
 
 
 getHomeR :: Handler RepHtml 
@@ -167,8 +174,12 @@ getReplaceCreationTimeR uuid = do
 
 
 
-detailIDMapInfoHamlet :: HXournalIDMapInfo -> GGWidget HXournalIDMapServer Handler ()
-detailIDMapInfoHamlet HXournalIDMapInfo{..} = do 
+detailIDMapInfoHamlet :: String 
+                      -> GGWidget HXournalIDMapServer Handler ()
+                      -> Enctype
+                      -> HXournalIDMapInfo 
+                      -> GGWidget HXournalIDMapServer Handler ()
+detailIDMapInfoHamlet urlbase widget enctype  HXournalIDMapInfo{..} = do 
   setTitle (toHtml hxournal_idmap_uuid)
   addScriptRemote "https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"
   addScriptRemote "https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.16/jquery-ui.min.js"
@@ -176,7 +187,7 @@ detailIDMapInfoHamlet HXournalIDMapInfo{..} = do
   toWidget [julius|
 $(function() { 
     $(".datepicker").datepicker();
-    $("form").submit(function(event){
+    $("#form").submit(function(event){
 	event.preventDefault();
 
         var creationtime = $('input[id="creationtime"]',this).val();
@@ -188,20 +199,9 @@ $(function() {
         console.debug(theurl);
 
         var params = { format : 'json' , "creationtime" : creationtime } 
-        // $.get(url);
         $.getJSON ( theurl, params );  
-        //$.delay(1000);
         window.location.href = "http://susy.physics.lsa.umich.edu:8090/idmap" + "@{HXournalIDMapR hxournal_idmap_uuid}"
-       
-        // $.ajax( { 
-       //  type : "GET",   
-       //  url : theurl,
-       //  contentType: "json",
-       //  data : { "creationtime" : creationtime } 
-      // } );
     });
-
-
 }); 
 
 |]
@@ -213,7 +213,11 @@ $(function() {
         <input type="text" class="datepicker" id="creationtime">
         <input type="submit" value="Submit">
     <p>  #{hxournal_idmap_numofpages}
-|]
+    <p> 
+      <form id="formpost"  method=post action=#{urlbase}@{ReplaceFileR hxournal_idmap_uuid} enctype=#{enctype}>
+        ^{widget}
+        <input type="submit" value="Submit">
+|]      
 
 
 
@@ -221,8 +225,11 @@ instance ToHtml UTCTime where
   toHtml = toHtml . show
 
 
+idmapurlbase = "http://susy.physics.lsa.umich.edu:8090/idmap"
+
 getHXournalIDMapR :: UUID -> Handler RepHtmlJson
 getHXournalIDMapR idee = do 
+  ((_,widget),enctype) <- generateFormPost fileForm
   liftIO $ putStrLn "getHXournalIDMapR called"
   acid <- return.server_acid =<< getYesod
   minfo <- liftIO $ query acid (QueryHXournalIDMap idee)
@@ -232,7 +239,7 @@ getHXournalIDMapR idee = do
   setHeader "X-Requested-With" "XmlHttpRequest"
   setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
   maybe (defaultLayoutJson defhlet (A.toJSON (Just minfo)))
-        (\info->defaultLayoutJson (detailIDMapInfoHamlet info) (A.toJSON (Just minfo)))
+        (\info->defaultLayoutJson (detailIDMapInfoHamlet idmapurlbase widget enctype info) (A.toJSON (Just minfo)))
         minfo
 
 
@@ -271,3 +278,33 @@ deleteHXournalIDMapR idee = do
   r <- liftIO $ update acid (DeleteHXournalIDMap idee)
   liftIO $ putStrLn $ show r 
   defaultLayoutJson defhlet (A.toJSON (Just r))
+
+
+
+data FileForm = FileForm { fileFile :: FileInfo }
+     deriving Show 
+
+-- fileAForm :: (RenderMessage s FormMessage, RenderMessage m FormMessage) => AForm s m FileForm
+fileAForm = FileForm <$> fileAFormReq "replace xoj file:"
+
+fileForm = renderTable fileAForm 
+
+
+
+postReplaceFileR :: UUID -> Handler RepHtmlJson 
+postReplaceFileR idee = do 
+  liftIO $ putStrLn "postReplaceFileR called"
+  ((result,widget),enctype) <- runFormPost fileForm 
+
+  case result of 
+    FormSuccess r -> do 
+      let content = Yesod.fileContent . fileFile $ r
+      tempdir <- liftIO $ getTemporaryDirectory
+      liftIO . LS.writeFile (tempdir</> toString idee ++ "_new.xoj") $ content
+      -- liftIO . LS.putStrLn .  
+    _ -> do 
+      liftIO $ putStrLn "fail"
+
+  let defaultfn = defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Int))
+
+  defaultfn 

@@ -17,7 +17,9 @@ Executable hxournal-idmap-server
                  uuid == 1.2.*,
                  bytestring == 0.9.*, 
                  containers == 0.4.*, 
-                 acid-state == 0.6.*, 
+                 acid-state == 0.6.*,
+                 cmdargs == 0.9.*,
+                 aeson == 0.4.*,  
                  hxournal-idmap-type >= 0.0.999 && < 0.2,
                  hxournal-idmap-server
   ghc-options: 	-Wall -O2 -threaded -funbox-strict-fields -fno-warn-unused-do-bind
@@ -46,10 +48,14 @@ Library
                  yesod-form == 0.3.*, 
                  blaze-html == 0.4.*, 
                  time == 1.2.*, 
-                 old-locale == 1.0.*
+                 old-locale == 1.0.*, 
+                 directory == 1.1.*,
+                 filepath == 1.2.*, 
+                 cmdargs == 0.9.*
   Exposed-Modules: 
                    Database.HXournal.IDMap.Server.Type
                    Database.HXournal.IDMap.Server.Yesod
+                   Database.HXournal.IDMap.Server.ProgType
 
 
 
