@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, QuasiQuotes, DeriveDataTypeable, 
              MultiParamTypeClasses, TypeFamilies, FlexibleContexts,  
-             FlexibleInstances, OverloadedStrings #-}
+             FlexibleInstances, OverloadedStrings, RecordWildCards #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -20,12 +20,17 @@ import Data.List (sortBy)
 import Data.Function (on)
 import Database.HXournal.IDMap.Server.Type
 
+import Data.Text (unpack)
+import Text.Blaze
+
 mkYesod "HXournalIDMapServer" [parseRoutes|
 / HomeR GET
+/test TestR
 /listhxournalidmap  ListHXournalIDMapR GET
 /uploadhxournalidmap  UploadHXournalIDMapR POST
 /hxournalidmap/#UUID HXournalIDMapR 
 /listhxournalidmapusingtime/#UTCTime/#UTCTime ListHXournalIDMapUsingTimeR GET
+/replacecreationtime/#UUID ReplaceCreationTimeR GET
 |]
 
 instance Yesod HXournalIDMapServer where
@@ -116,14 +121,119 @@ handleHXournalIDMapR name = do
     "DELETE" -> deleteHXournalIDMapR name
     x -> error ("No such action " ++ show x ++ " in handlerHXournalIDMapR")
 
+
+
+handleTestR :: Handler RepHtmlJson
+handleTestR = do 
+  wr <- return . reqWaiRequest =<< getRequest
+  case requestMethod wr of 
+    "GET" -> liftIO $ putStrLn "GET called in TestR"
+    "PUT" -> liftIO $ putStrLn "PUT called in TestR"
+    _ -> liftIO $ putStrLn "???"
+  setHeader "Access-Control-Allow-Origin" "*"
+  setHeader "Access-Control-Allow-Methods" "POST, GET"
+  setHeader "X-Requested-With" "XmlHttpRequest"
+  setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
+  defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
+
+
+getReplaceCreationTimeR :: UUID -> Handler RepHtmlJson
+getReplaceCreationTimeR uuid = do 
+  setHeader "Access-Control-Allow-Origin" "*"
+  setHeader "Access-Control-Allow-Methods" "*"
+  setHeader "X-Requested-With" "XmlHttpRequest"
+  setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
+
+  liftIO $ putStrLn "getReplaceCreationTimeR called"
+
+  let defaultfn = defaultLayoutJson defhlet (A.toJSON ("test" :: String))
+
+
+  acid <- return.server_acid =<< getYesod
+  minfo <- liftIO $ query acid (QueryHXournalIDMap uuid)
+  case minfo of 
+    Nothing -> defaultfn
+    Just info -> do 
+      lst <- return . reqGetParams =<< getRequest 
+      let lst2 =filter (\(x,y) -> x == "creationtime") lst 
+          newinfo = if not . Prelude.null $ lst2
+                    then let mutctime = fromSinglePiece . snd . head $ lst2
+                         in maybe info (\utctime -> info { hxournal_idmap_creationtime = utctime }) mutctime 
+                    else info 
+      liftIO $ putStrLn $ show $ newinfo 
+      r <- liftIO $ update acid (UpdateHXournalIDMap newinfo) 
+      liftIO $ putStrLn $ show r 
+      defaultfn 
+
+
+
+detailIDMapInfoHamlet :: HXournalIDMapInfo -> GGWidget HXournalIDMapServer Handler ()
+detailIDMapInfoHamlet HXournalIDMapInfo{..} = do 
+  setTitle (toHtml hxournal_idmap_uuid)
+  addScriptRemote "https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"
+  addScriptRemote "https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.16/jquery-ui.min.js"
+  addStylesheetRemote "http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css"
+  toWidget [julius|
+$(function() { 
+    $(".datepicker").datepicker();
+    $("form").submit(function(event){
+	event.preventDefault();
+
+        var creationtime = $('input[id="creationtime"]',this).val();
+        var creationtime1 = creationtime.replace("/","").replace("/","") ;
+        creationtime = creationtime1.substring(4,8)+creationtime1.substring(0,4)  
+                   +"-000000-GMT";
+        var theurl = "http://susy.physics.lsa.umich.edu:8090/idmap" + "@{ReplaceCreationTimeR hxournal_idmap_uuid}";
+
+        console.debug(theurl);
+
+        var params = { format : 'json' , "creationtime" : creationtime } 
+        // $.get(url);
+        $.getJSON ( theurl, params );  
+        //$.delay(1000);
+        window.location.href = "http://susy.physics.lsa.umich.edu:8090/idmap" + "@{HXournalIDMapR hxournal_idmap_uuid}"
+       
+        // $.ajax( { 
+       //  type : "GET",   
+       //  url : theurl,
+       //  contentType: "json",
+       //  data : { "creationtime" : creationtime } 
+      // } );
+    });
+
+
+}); 
+
+|]
+  [whamlet|
+    <h1> #{hxournal_idmap_uuid}
+    <p>  #{hxournal_idmap_name}
+    <p> #{hxournal_idmap_creationtime} 
+      <form id="form" action=@{HXournalIDMapR hxournal_idmap_uuid}> 
+        <input type="text" class="datepicker" id="creationtime">
+        <input type="submit" value="Submit">
+    <p>  #{hxournal_idmap_numofpages}
+|]
+
+
+
+instance ToHtml UTCTime where
+  toHtml = toHtml . show
+
+
 getHXournalIDMapR :: UUID -> Handler RepHtmlJson
 getHXournalIDMapR idee = do 
   liftIO $ putStrLn "getHXournalIDMapR called"
   acid <- return.server_acid =<< getYesod
-  r <- liftIO $ query acid (QueryHXournalIDMap idee)
-  liftIO $ putStrLn $ show r 
-  let hlet = [whamlet| <h1> File #{idee}|]
-  defaultLayoutJson hlet (A.toJSON (Just r))
+  minfo <- liftIO $ query acid (QueryHXournalIDMap idee)
+  liftIO $ putStrLn $ show minfo
+  setHeader "Access-Control-Allow-Origin" "*"
+  setHeader "Access-Control-Allow-Methods" "POST, GET"
+  setHeader "X-Requested-With" "XmlHttpRequest"
+  setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
+  maybe (defaultLayoutJson defhlet (A.toJSON (Just minfo)))
+        (\info->defaultLayoutJson (detailIDMapInfoHamlet info) (A.toJSON (Just minfo)))
+        minfo
 
 
 putHXournalIDMapR :: UUID -> Handler RepHtmlJson
