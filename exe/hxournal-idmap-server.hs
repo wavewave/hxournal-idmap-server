@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DeriveDataTypeable #-}
 
 module Main where
 
@@ -13,6 +13,10 @@ import Database.HXournal.IDMap.Server.ProgType
 import Database.HXournal.IDMap.Type
 import Data.Aeson as A 
 
+
+import Control.Applicative
+import Data.UUID
+import Data.Time.Clock
 import qualified Data.ByteString.Lazy as LS
 
 data HXournalIDMapInfoOld = HXournalIDMapInfoOld { 
@@ -31,6 +35,10 @@ instance FromJSON HXournalIDMapInfoOld where
                          <*> v .: "creationtime"
                          <*> v .: "numofpages"
 
+
+convertOldToNew :: HXournalIDMapInfoOld -> HXournalIDMapInfo 
+convertOldToNew (HXournalIDMapInfoOld uuid name ctime npages) =
+  HXournalIDMapInfo uuid name ctime 0 npages 
 
 
 main :: IO ()
@@ -60,4 +68,8 @@ commandLineProcess (DumpIn filepath)  = do
   let decoded = (A.decode $ encoded :: Maybe [HXournalIDMapInfoOld]) 
   case decoded of 
     Nothing -> return () 
-    Just lst -> putStrLn $ show $ length lst 
+    Just lst -> do 
+      let newlst = map convertOldToNew lst
+      acid <- openLocalState M.empty 
+      mapM_ (\x -> Data.Acid.update acid (AddHXournalIDMap x)) newlst
+      --  putStrLn $ show $ take 3 newlst 
