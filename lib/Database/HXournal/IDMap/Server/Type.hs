@@ -25,10 +25,18 @@ instance SinglePiece UTCTime where
   fromSinglePiece = parseTime defaultTimeLocale "%Y%m%d-%H%M%S-%Z" . T.unpack 
   toSinglePiece = T.pack . formatTime defaultTimeLocale "%Y%m%d_%H%M%S_%Z"
 
+-- | 
 
 instance ToHtml UUID where
   toHtml = toHtml . toString 
 
+-- | 
+
+instance ToHtml UTCTime where
+  toHtml = toHtml . show
+
+
 data HXournalIDMapServer = HXournalIDMapServer {
   server_acid :: AcidState HXournalIDMapInfoRepository
 }
+

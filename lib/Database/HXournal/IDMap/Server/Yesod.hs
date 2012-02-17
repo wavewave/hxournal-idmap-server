@@ -31,6 +31,8 @@ import System.Directory
 import Control.Concurrent
 import Database.HXournal.Store.Job
 
+-- | 
+
 mkYesod "HXournalIDMapServer" [parseRoutes|
 / HomeR GET
 /test TestR
@@ -42,14 +44,24 @@ mkYesod "HXournalIDMapServer" [parseRoutes|
 /replacefile/#UUID ReplaceFileR POST 
 |]
 
+-- | 
 
 instance Yesod HXournalIDMapServer where
   approot _ = ""
   maximumContentLength _ _ = 100000000
 
+-- | 
+
 instance RenderMessage HXournalIDMapServer FormMessage where
   renderMessage _ _ = defaultFormMessage
 
+
+-- |
+
+data FileForm = FileForm { fileFile :: FileInfo }
+     deriving Show 
+
+-- | 
 
 getHomeR :: Handler RepHtml 
 getHomeR = do 
@@ -63,9 +75,12 @@ getHomeR = do
     <h1> hello world 
 |]
 
+-- | 
 
 defhlet :: GGWidget m Handler ()
 defhlet = [whamlet| <h1> HTML output not supported |]
+
+-- | 
 
 getListHXournalIDMapUsingTimeR :: UTCTime -> UTCTime -> Handler RepHtmlJson 
 getListHXournalIDMapUsingTimeR time1 time2 = do 
@@ -84,6 +99,8 @@ getListHXournalIDMapUsingTimeR time1 time2 = do
   let filtered = sortBy (compare `on` hxournal_idmap_creationtime) . filter cmpfunc $  r 
   defaultLayoutJson defhlet (A.toJSON (Just filtered))
 
+-- | 
+
 getListHXournalIDMapR :: Handler RepHtmlJson
 getListHXournalIDMapR = do 
   liftIO $ putStrLn "getQueueListR called" 
@@ -92,6 +109,7 @@ getListHXournalIDMapR = do
   liftIO $ putStrLn $ show r 
   defaultLayoutJson defhlet (A.toJSON (Just r))
 
+-- | 
 
 postUploadHXournalIDMapR :: Handler RepHtmlJson
 postUploadHXournalIDMapR = do 
@@ -120,7 +138,7 @@ postUploadHXournalIDMapR = do
       liftIO $ putStrLn "partial" 
       defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
 
-
+-- | 
 
 handleHXournalIDMapR :: UUID -> Handler RepHtmlJson
 handleHXournalIDMapR name = do
@@ -131,21 +149,59 @@ handleHXournalIDMapR name = do
     "DELETE" -> deleteHXournalIDMapR name
     x -> error ("No such action " ++ show x ++ " in handlerHXournalIDMapR")
 
-
+-- |
 
 handleTestR :: Handler RepHtmlJson
 handleTestR = do 
-  wr <- return . reqWaiRequest =<< getRequest
-  case requestMethod wr of 
-    "GET" -> liftIO $ putStrLn "GET called in TestR"
-    "PUT" -> liftIO $ putStrLn "PUT called in TestR"
-    _ -> liftIO $ putStrLn "???"
-  setHeader "Access-Control-Allow-Origin" "*"
-  setHeader "Access-Control-Allow-Methods" "POST, GET"
-  setHeader "X-Requested-With" "XmlHttpRequest"
-  setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
+    wr <- return . reqWaiRequest =<< getRequest
+    case requestMethod wr of 
+      "GET" -> do { liftIO $ putStrLn "GET called in TestR"; defact } 
+      "PUT" -> do { liftIO $ putStrLn "PUT called in TestR"; defact } 
+      "POST" -> postHandleTestR  
+      _ -> do { liftIO $ putStrLn "???" ; defact } 
+  where 
+    defact = do 
+      setHeader "Access-Control-Allow-Origin" "*"
+      setHeader "Access-Control-Allow-Methods" "POST, GET"
+      setHeader "X-Requested-With" "XmlHttpRequest"
+      setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
+      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
+
+-- | 
+postHandleTestR :: Handler RepHtmlJson
+postHandleTestR = do 
+  liftIO $ putStrLn "postHandleTestR called"
+
+  acid <- return.server_acid =<< getYesod
+  _ <- getRequest
+  bs' <- lift EL.consume
+  let bs = S.concat bs' 
+  liftIO .  putStrLn . show $ bs 
   defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
 
+
+{-   let parsed = parse json bs 
+  case parsed of 
+    Done _ parsedjson -> do 
+      case (A.fromJSON parsedjson :: A.Result HXournalIDMapInfo) of 
+        Success minfo -> do 
+          r <- liftIO $ update acid (AddHXournalIDMap minfo)
+          liftIO $ print (Just r)
+          liftIO $ print (A.toJSON (Just r))
+          defaultLayoutJson defhlet (A.toJSON (Just r))
+        Error err -> do 
+          liftIO $ putStrLn err 
+          defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
+    Fail _ ctxts err -> do 
+      liftIO $ putStrLn (concat ctxts++err)
+      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
+    Partial _ -> do 
+      liftIO $ putStrLn "partial" 
+      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo)) -}
+
+
+
+-- | 
 
 getReplaceCreationTimeR :: UUID -> Handler RepHtmlJson
 getReplaceCreationTimeR uuid = do 
@@ -153,12 +209,8 @@ getReplaceCreationTimeR uuid = do
   setHeader "Access-Control-Allow-Methods" "*"
   setHeader "X-Requested-With" "XmlHttpRequest"
   setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
-
   liftIO $ putStrLn "getReplaceCreationTimeR called"
-
   let defaultfn = defaultLayoutJson defhlet (A.toJSON ("test" :: String))
-
-
   acid <- return.server_acid =<< getYesod
   minfo <- liftIO $ query acid (QueryHXournalIDMap uuid)
   case minfo of 
@@ -175,7 +227,7 @@ getReplaceCreationTimeR uuid = do
       liftIO $ putStrLn $ show r 
       defaultfn 
 
-
+-- | 
 
 detailIDMapInfoHamlet :: String 
                       -> GGWidget HXournalIDMapServer Handler ()
@@ -223,13 +275,11 @@ $(function() {
         <input type="submit" value="Submit">
 |]      
 
-
-
-instance ToHtml UTCTime where
-  toHtml = toHtml . show
-
+-- | 
 
 idmapurlbase = "http://susy.physics.lsa.umich.edu:8090/idmap"
+
+-- | 
 
 getHXournalIDMapR :: UUID -> Handler RepHtmlJson
 getHXournalIDMapR idee = do 
@@ -246,6 +296,7 @@ getHXournalIDMapR idee = do
         (\info->defaultLayoutJson (detailIDMapInfoHamlet idmapurlbase widget enctype info) (A.toJSON (Just minfo)))
         minfo
 
+-- | 
 
 putHXournalIDMapR :: UUID -> Handler RepHtmlJson
 putHXournalIDMapR idee = do 
@@ -276,6 +327,8 @@ putHXournalIDMapR idee = do
       liftIO $ putStrLn "partial" 
       defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
 
+-- | 
+
 deleteHXournalIDMapR :: UUID -> Handler RepHtmlJson
 deleteHXournalIDMapR idee = do 
   acid <- return.server_acid =<< getYesod
@@ -284,23 +337,20 @@ deleteHXournalIDMapR idee = do
   defaultLayoutJson defhlet (A.toJSON (Just r))
 
 
-
-data FileForm = FileForm { fileFile :: FileInfo }
-     deriving Show 
-
+-- | 
 -- fileAForm :: (RenderMessage s FormMessage, RenderMessage m FormMessage) => AForm s m FileForm
 fileAForm = FileForm <$> fileAFormReq "replace xoj file:"
 
+-- | 
+
 fileForm = renderTable fileAForm 
 
-
+-- | 
 
 postReplaceFileR :: UUID -> Handler RepHtmlJson 
 postReplaceFileR idee = do 
   liftIO $ putStrLn "postReplaceFileR called"
   let defaultfn = defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe Int))
-      
-
   acid <- return . server_acid =<< getYesod
   minfo <- liftIO $ query acid (QueryHXournalIDMap idee)
   maybe defaultfn 
@@ -324,8 +374,6 @@ postReplaceFileR idee = do
             _ -> do 
               liftIO $ putStrLn "fail"
               defaultfn 
-              
-
         ) 
         minfo
 
