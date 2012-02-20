@@ -53,11 +53,15 @@ Library
                  old-locale == 1.0.*, 
                  directory == 1.1.*,
                  filepath == 1.2.*, 
-                 cmdargs == 0.9.*
+                 cmdargs == 0.9.*, 
+                 uuid
   Exposed-Modules: 
                    Database.HXournal.IDMap.Server.Type
                    Database.HXournal.IDMap.Server.Yesod
                    Database.HXournal.IDMap.Server.ProgType
+                   Database.HXournal.IDMap.Server.Parse.Multipart
+                   Database.HXournal.IDMap.Server.Job.FileWork
+
 
 
 

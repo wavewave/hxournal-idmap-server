@@ -8,6 +8,7 @@ module Database.HXournal.IDMap.Server.Yesod where
 
 import Control.Applicative
 
+import qualified Data.Map as M
 import Yesod hiding (update)
 import Network.Wai
 import qualified Data.Enumerator.List as EL
@@ -15,15 +16,19 @@ import qualified Data.ByteString as S
 import Database.HXournal.IDMap.Type
 import Data.Acid
 import Data.Attoparsec as P
+import qualified Data.Attoparsec.Text as PT
 import Data.Aeson as A
+import Data.Monoid
 import Data.UUID
 import Data.Time.Clock
 import Data.List (sortBy)
 import Data.Function (on)
 import Database.HXournal.IDMap.Server.Type
-
+import Database.HXournal.IDMap.Server.Job.FileWork
+import Database.HXournal.IDMap.Server.Parse.Multipart
 import qualified Data.ByteString.Lazy as LS
-import Data.Text (unpack)
+import Data.Text (unpack,Text(..))
+import Data.Text.Encoding
 import Text.Blaze
 import System.FilePath
 import System.Directory 
@@ -60,6 +65,25 @@ instance RenderMessage HXournalIDMapServer FormMessage where
 
 data FileForm = FileForm { fileFile :: FileInfo }
      deriving Show 
+
+-- | 
+-- fileAForm :: (RenderMessage s FormMessage, RenderMessage m FormMessage) => AForm s m FileForm
+fileAForm = FileForm <$> fileAFormReq "replace xoj file:"
+
+-- | 
+
+fileForm = renderTable fileAForm 
+
+-- | 
+
+data MyTestForm = MyTestForm { testContent :: Text }
+                deriving Show 
+
+-- | 
+
+-- myTestAForm = MyTestForm <$> areq textField "json" Nothing 
+
+-- myTestForm = renderTable myTestAForm 
 
 -- | 
 
@@ -155,7 +179,8 @@ handleTestR :: Handler RepHtmlJson
 handleTestR = do 
     wr <- return . reqWaiRequest =<< getRequest
     case requestMethod wr of 
-      "GET" -> do { liftIO $ putStrLn "GET called in TestR"; defact } 
+      "GET" -> getHandleTestR
+         -- do { liftIO $ putStrLn "GET called in TestR"; defact } 
       "PUT" -> do { liftIO $ putStrLn "PUT called in TestR"; defact } 
       "POST" -> postHandleTestR  
       _ -> do { liftIO $ putStrLn "???" ; defact } 
@@ -167,17 +192,68 @@ handleTestR = do
       setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
       defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
 
+
 -- | 
+
+getHandleTestR :: Handler RepHtmlJson
+getHandleTestR = do 
+  liftIO $ putStrLn "in getHandleTestR"
+  ((_,widget),enctype) <- generateFormPost fileForm 
+  acid <- return.server_acid =<< getYesod
+  setHeader "Access-Control-Allow-Origin" "*"
+  setHeader "Access-Control-Allow-Methods" "POST, GET"
+  setHeader "X-Requested-With" "XmlHttpRequest"
+  setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
+  defaultLayoutJson (testHamlet idmapurlbase widget enctype) (A.toJSON (Nothing :: Maybe Int))
+
+
+-- | 
+
 postHandleTestR :: Handler RepHtmlJson
 postHandleTestR = do 
+  liftIO $ putStrLn "" 
+  liftIO $ putStrLn "--------------------------" 
   liftIO $ putStrLn "postHandleTestR called"
 
   acid <- return.server_acid =<< getYesod
-  _ <- getRequest
-  bs' <- lift EL.consume
-  let bs = S.concat bs' 
-  liftIO .  putStrLn . show $ bs 
-  defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
+  ((result,widget),enctype) <- runFormPostNoNonce fileForm 
+  -- liftIO$  putStrLn $ show result 
+  wreq <-  return.reqWaiRequest =<< getRequest
+  liftIO $ putStrLn $ show result 
+  case result of 
+    FormSuccess (FileForm finfo) -> do 
+      minfo <- liftIO $ addFileToRepo finfo
+      case minfo of 
+        Nothing -> 
+          defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo)) 
+        Just info -> do 
+          r <- liftIO $ update acid (AddHXournalIDMap info)
+          defaultLayoutJson defhlet (A.toJSON (Just r))
+    _ -> do 
+      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))  
+
+{-
+  let mctype = M.lookup "Content-Type" . M.fromList . requestHeaders $ wreq
+  maybe (return ()) 
+        (\ctype -> do 
+           liftIO $ putStrLn $ show ctype
+           bs' <- return . LS.fromChunks =<< lift EL.consume
+           liftIO $ LS.putStrLn bs'
+           {-
+           let rparse = PT.parse multipartHeader (decodeUtf8 (ctype `mappend` " ")) 
+           case rparse of 
+             Done _ bdry -> do 
+               liftIO $ putStrLn $ show bdry 
+               bs' <- lift EL.consume
+               let bs = LS.fromChunks bs' 
+               let bss = separateUsingBdry bs
+               liftIO $ putStrLn $ show bss
+             _ -> return () -}
+        )
+        mctype
+-}
+  -- liftIO . putStrLn . show $ bs 
+  -- liftIO . putStrLn . show $ result  
 
 
 {-   let parsed = parse json bs 
@@ -226,58 +302,6 @@ getReplaceCreationTimeR uuid = do
       r <- liftIO $ update acid (UpdateHXournalIDMap newinfo) 
       liftIO $ putStrLn $ show r 
       defaultfn 
-
--- | 
-
-detailIDMapInfoHamlet :: String 
-                      -> GGWidget HXournalIDMapServer Handler ()
-                      -> Enctype
-                      -> HXournalIDMapInfo 
-                      -> GGWidget HXournalIDMapServer Handler ()
-detailIDMapInfoHamlet urlbase widget enctype  HXournalIDMapInfo{..} = do 
-  setTitle (toHtml hxournal_idmap_uuid)
-  addScriptRemote "https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"
-  addScriptRemote "https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.16/jquery-ui.min.js"
-  addStylesheetRemote "http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css"
-  toWidget [julius|
-$(function() { 
-    $(".datepicker").datepicker();
-    $("#form").submit(function(event){
-	event.preventDefault();
-
-        var creationtime = $('input[id="creationtime"]',this).val();
-        var creationtime1 = creationtime.replace("/","").replace("/","") ;
-        creationtime = creationtime1.substring(4,8)+creationtime1.substring(0,4)  
-                   +"-000000-GMT";
-        var theurl = "http://susy.physics.lsa.umich.edu:8090/idmap" + "@{ReplaceCreationTimeR hxournal_idmap_uuid}";
-
-        console.debug(theurl);
-
-        var params = { format : 'json' , "creationtime" : creationtime } 
-        $.getJSON ( theurl, params );  
-        window.location.href = "http://susy.physics.lsa.umich.edu:8090/idmap" + "@{HXournalIDMapR hxournal_idmap_uuid}"
-    });
-}); 
-
-|]
-  [whamlet|
-    <h1> #{hxournal_idmap_uuid}
-    <p>  #{hxournal_idmap_name}
-    <p> #{hxournal_idmap_creationtime} 
-      <form id="form" action=@{HXournalIDMapR hxournal_idmap_uuid}> 
-        <input type="text" class="datepicker" id="creationtime">
-        <input type="submit" value="Submit">
-    <p>  #{hxournal_idmap_currentversion}
-    <p>  #{hxournal_idmap_numofpages}
-    <p> 
-      <form id="formpost"  method=post action=#{urlbase}@{ReplaceFileR hxournal_idmap_uuid} enctype=#{enctype}>
-        ^{widget}
-        <input type="submit" value="Submit">
-|]      
-
--- | 
-
-idmapurlbase = "http://susy.physics.lsa.umich.edu:8090/idmap"
 
 -- | 
 
@@ -337,13 +361,6 @@ deleteHXournalIDMapR idee = do
   defaultLayoutJson defhlet (A.toJSON (Just r))
 
 
--- | 
--- fileAForm :: (RenderMessage s FormMessage, RenderMessage m FormMessage) => AForm s m FileForm
-fileAForm = FileForm <$> fileAFormReq "replace xoj file:"
-
--- | 
-
-fileForm = renderTable fileAForm 
 
 -- | 
 
@@ -378,4 +395,90 @@ postReplaceFileR idee = do
         minfo
 
 
+----- Form and Hamlet 
+
+-- | 
+
+detailIDMapInfoHamlet :: String 
+                      -> GGWidget HXournalIDMapServer Handler ()
+                      -> Enctype
+                      -> HXournalIDMapInfo 
+                      -> GGWidget HXournalIDMapServer Handler ()
+detailIDMapInfoHamlet urlbase widget enctype  HXournalIDMapInfo{..} = do 
+  setTitle (toHtml hxournal_idmap_uuid)
+  addScriptRemote "https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"
+  addScriptRemote "https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.16/jquery-ui.min.js"
+  addStylesheetRemote "http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css"
+  toWidget [julius|
+$(function() { 
+    $(".datepicker").datepicker();
+    $("#form").submit(function(event){
+	event.preventDefault();
+
+        var creationtime = $('input[id="creationtime"]',this).val();
+        var creationtime1 = creationtime.replace("/","").replace("/","") ;
+        creationtime = creationtime1.substring(4,8)+creationtime1.substring(0,4)  
+                   +"-000000-GMT";
+        var theurl = "http://susy.physics.lsa.umich.edu/idmap" + "@{ReplaceCreationTimeR hxournal_idmap_uuid}";
+
+        console.debug(theurl);
+
+        var params = { format : 'json' , "creationtime" : creationtime } 
+        $.getJSON ( theurl, params );  
+        window.location.href = "http://susy.physics.lsa.umich.edu/idmap" + "@{HXournalIDMapR hxournal_idmap_uuid}"
+    });
+}); 
+
+|]
+  [whamlet|
+    <h1> #{hxournal_idmap_uuid}
+    <p>  #{hxournal_idmap_name}
+    <p> #{hxournal_idmap_creationtime} 
+      <form id="form" action=@{HXournalIDMapR hxournal_idmap_uuid}> 
+        <input type="text" class="datepicker" id="creationtime">
+        <input type="submit" value="Submit">
+    <p>  #{hxournal_idmap_currentversion}
+    <p>  #{hxournal_idmap_numofpages}
+    <p> 
+      <form id="formpost"  method=post action=#{urlbase}@{TestR} enctype=#{enctype}>
+        ^{widget}
+        <input type="submit" value="Submit">
+|]      
+
+
+-- | 
+
+testHamlet :: String 
+           -> GGWidget HXournalIDMapServer Handler ()
+           -> Enctype
+           -> GGWidget HXournalIDMapServer Handler ()
+testHamlet urlbase widget enctype =   
+  [whamlet|
+      <form id="formpost" method=post action=#{urlbase}@{TestR} enctype=#{enctype}>
+        ^{widget}
+        <input type="submit" value="Submit">
+|]      
+
+
+
+{-
+  [whamlet|
+    <h1> #{hxournal_idmap_uuid}
+    <p>  #{hxournal_idmap_name}
+    <p> #{hxournal_idmap_creationtime} 
+      <form id="form" action=@{HXournalIDMapR hxournal_idmap_uuid}> 
+        <input type="text" class="datepicker" id="creationtime">
+        <input type="submit" value="Submit">
+    <p>  #{hxournal_idmap_currentversion}
+    <p>  #{hxournal_idmap_numofpages}
+    <p> 
+      <form id="formpost"  method=post action=#{urlbase}@{ReplaceFileR hxournal_idmap_uuid} enctype=#{enctype}>
+        ^{widget}
+        <input type="submit" value="Submit">
+|]      
+-}
+
+-- | 
+
+idmapurlbase = "http://susy.physics.lsa.umich.edu/idmap"
 
