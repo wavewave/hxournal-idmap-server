@@ -41,6 +41,7 @@ import Database.HXournal.Store.Job
 mkYesod "HXournalIDMapServer" [parseRoutes|
 / HomeR GET
 /test TestR
+/uploadhxournalfile UploadHXournalFileR 
 /listhxournalidmap  ListHXournalIDMapR GET
 /uploadhxournalidmap  UploadHXournalIDMapR POST
 /hxournalidmap/#UUID HXournalIDMapR 
@@ -60,7 +61,6 @@ instance Yesod HXournalIDMapServer where
 instance RenderMessage HXournalIDMapServer FormMessage where
   renderMessage _ _ = defaultFormMessage
 
-
 -- |
 
 data FileForm = FileForm { fileFile :: FileInfo }
@@ -73,17 +73,6 @@ fileAForm = FileForm <$> fileAFormReq "replace xoj file:"
 -- | 
 
 fileForm = renderTable fileAForm 
-
--- | 
-
-data MyTestForm = MyTestForm { testContent :: Text }
-                deriving Show 
-
--- | 
-
--- myTestAForm = MyTestForm <$> areq textField "json" Nothing 
-
--- myTestForm = renderTable myTestAForm 
 
 -- | 
 
@@ -181,8 +170,8 @@ handleTestR = do
     case requestMethod wr of 
       "GET" -> getHandleTestR
          -- do { liftIO $ putStrLn "GET called in TestR"; defact } 
-      "PUT" -> do { liftIO $ putStrLn "PUT called in TestR"; defact } 
-      "POST" -> postHandleTestR  
+--      "PUT" -> do { liftIO $ putStrLn "PUT called in TestR"; defact } 
+--       "POST" -> postHandleTestR  
       _ -> do { liftIO $ putStrLn "???" ; defact } 
   where 
     defact = do 
@@ -206,20 +195,55 @@ getHandleTestR = do
   setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
   defaultLayoutJson (testHamlet idmapurlbase widget enctype) (A.toJSON (Nothing :: Maybe Int))
 
+-- | 
+
+handleUploadHXournalFileR :: Handler RepHtmlJson
+handleUploadHXournalFileR = do 
+    wr <- return . reqWaiRequest =<< getRequest
+    case requestMethod wr of 
+      "GET" -> getUploadHXournalFileR
+      "POST" -> postUploadHXournalFileR  
+      _ -> do { liftIO $ putStrLn "??? in handleUploadHXournalFileR" ; defact } 
+  where 
+    defact = do 
+      setHeader "Access-Control-Allow-Origin" "*"
+      setHeader "Access-Control-Allow-Methods" "POST, GET"
+      setHeader "X-Requested-With" "XmlHttpRequest"
+      setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
+      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
 
 -- | 
 
-postHandleTestR :: Handler RepHtmlJson
-postHandleTestR = do 
+getUploadHXournalFileR :: Handler RepHtmlJson
+getUploadHXournalFileR = do 
+  ((_,widget),enctype) <- generateFormPost fileForm
+  setHeader "Access-Control-Allow-Origin" "*"
+  setHeader "Access-Control-Allow-Methods" "POST, GET"
+  setHeader "X-Requested-With" "XmlHttpRequest"
+  setHeader "Access-Control-Allow-Headers" "X-Requested-With, Content-Type"
+  defaultLayoutJson
+    [whamlet| 
+    <h1> Upload HXournal File 
+      <p> test 
+      <p> 
+        <form id="formpost" method=post action=#{idmapurlbase}@{UploadHXournalFileR} enctype=#{enctype}>
+          ^{widget}
+          <input type="submit" value="Submit">
+    |]
+    (A.toJSON (Nothing :: Maybe [Int]))
+
+
+-- | 
+
+postUploadHXournalFileR :: Handler RepHtmlJson
+postUploadHXournalFileR = do 
   liftIO $ putStrLn "" 
   liftIO $ putStrLn "--------------------------" 
-  liftIO $ putStrLn "postHandleTestR called"
+  liftIO $ putStrLn "postUploadHXournalFileR called"
 
   acid <- return.server_acid =<< getYesod
   ((result,widget),enctype) <- runFormPostNoNonce fileForm 
-  -- liftIO$  putStrLn $ show result 
   wreq <-  return.reqWaiRequest =<< getRequest
-  liftIO $ putStrLn $ show result 
   case result of 
     FormSuccess (FileForm finfo) -> do 
       minfo <- liftIO $ addFileToRepo finfo
@@ -231,51 +255,6 @@ postHandleTestR = do
           defaultLayoutJson defhlet (A.toJSON (Just r))
     _ -> do 
       defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))  
-
-{-
-  let mctype = M.lookup "Content-Type" . M.fromList . requestHeaders $ wreq
-  maybe (return ()) 
-        (\ctype -> do 
-           liftIO $ putStrLn $ show ctype
-           bs' <- return . LS.fromChunks =<< lift EL.consume
-           liftIO $ LS.putStrLn bs'
-           {-
-           let rparse = PT.parse multipartHeader (decodeUtf8 (ctype `mappend` " ")) 
-           case rparse of 
-             Done _ bdry -> do 
-               liftIO $ putStrLn $ show bdry 
-               bs' <- lift EL.consume
-               let bs = LS.fromChunks bs' 
-               let bss = separateUsingBdry bs
-               liftIO $ putStrLn $ show bss
-             _ -> return () -}
-        )
-        mctype
--}
-  -- liftIO . putStrLn . show $ bs 
-  -- liftIO . putStrLn . show $ result  
-
-
-{-   let parsed = parse json bs 
-  case parsed of 
-    Done _ parsedjson -> do 
-      case (A.fromJSON parsedjson :: A.Result HXournalIDMapInfo) of 
-        Success minfo -> do 
-          r <- liftIO $ update acid (AddHXournalIDMap minfo)
-          liftIO $ print (Just r)
-          liftIO $ print (A.toJSON (Just r))
-          defaultLayoutJson defhlet (A.toJSON (Just r))
-        Error err -> do 
-          liftIO $ putStrLn err 
-          defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
-    Fail _ ctxts err -> do 
-      liftIO $ putStrLn (concat ctxts++err)
-      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo))
-    Partial _ -> do 
-      liftIO $ putStrLn "partial" 
-      defaultLayoutJson defhlet (A.toJSON (Nothing :: Maybe HXournalIDMapInfo)) -}
-
-
 
 -- | 
 
